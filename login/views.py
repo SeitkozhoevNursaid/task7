@@ -1,18 +1,22 @@
-import jwt
-from django.contrib.sites.shortcuts import get_current_site
-from django.urls import reverse
-from django.conf import settings
-from django.core.mail import send_mail
+import random
+import string
 
-from rest_framework import status, generics
+from django.shortcuts import get_object_or_404
+
+from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from config.tasks import send_notifications
+from login.tasks import send_forgot_password
 from login.models import CustomUser
 from login.serializers import (
-    RegistrationSerializer, ChangePasswordSerializer, ForgotPasswordSerializer, ConfirmForgotPasswordSerializer
+    RegistrationSerializer,
+    ChangePasswordSerializer,
+    ForgotPasswordSerializer,
+    ConfirmForgotPasswordSerializer,
+    AdminResetPasswordSerializer,
     )
+
 
 class RegistrationAPIView(APIView):
     serializer_class = RegistrationSerializer
@@ -20,75 +24,64 @@ class RegistrationAPIView(APIView):
     def post(self, request):
         serializer = self.serializer_class(data=request.data)
         serializer.is_valid(raise_exception=True)
-        user, user.id = serializer.save()
-        current_site = get_current_site(request).domain
-        link = 'email-verify/'
-        print('------------------------------------------------')
-        url = f'http://{current_site}/{link}{user.id}/'
-        send_notifications(request.data['email'], url)
+        serializer.save()
 
         return Response('Вам на почту было отправлено письмо с подтверждением вашей регистрации, пожалуйста перейдите по ссылке!', status=status.HTTP_201_CREATED)
 
 
 class VerifyEmail(APIView):
-    def get(self, request, pk):
-        user = CustomUser.objects.get(pk=pk)
+    def get(self, request, activation_code):
+        user = get_object_or_404(CustomUser, activation_code=activation_code)
         user.is_active = True
-        user.save()
-        return Response('Вы успешно подтвердили регистрацию!')
+        user.activation_code = ''.join(random.choice(string.ascii_letters + string.digits)for i in range(1,25))
+        user.save(update_fields=['is_active', 'activation_code'])
+
+        return Response('Вы успешно подтвердили регистрацию!', status=200)
 
 
-class ChangePassword(generics.GenericAPIView):
-    serializer_class = ChangePasswordSerializer
+class ChangePassword(APIView):
+    serializer_class = ChangePasswordSerializer  
 
-    def put(self, request, pk):
-        serializer = self.serializer_class(data=request.data)
+    def patch(self, request):
+        serializer = self.serializer_class(request.user, data=request.data, context={'email': request.user})
         serializer.is_valid(raise_exception=True)
         serializer.save()
-        password = request.data['password']
-        new_password = request.data['new_password']
-        print(f"test:       {request.data}")
 
-        obj = CustomUser.objects.get(pk=pk)
-        if not obj.check_password(raw_password=password):
-            return Response({'Ошибка': 'Пароль не сходится'}, status=400)
-        else:
-            obj.set_password(new_password)
-            obj.save()
-            return Response( {'Успешно': 'Вы поменяли пароль'}, status=200)
+        return Response({'Успешно': 'Вы поменяли пароль'}, status=200)
 
 
 class ForgotPassword(APIView):
     serializer_class = ForgotPasswordSerializer
 
     def post(self, request):
-        serializer = self.serializer_class(data=request.data)
-        print(f"test22333322:    {serializer}")
+        email = CustomUser.objects.get(email=request.data['email'])
+        serializer = self.serializer_class(instance=request.data['email'], data=request.data)
         serializer.is_valid(raise_exception=True)
-        user = serializer.save()
-        # user = CustomUser.objects.filter(email=user['email'])
-        user = user['email']
-        print(f"test222:    {serializer.save()}")
-        print(f"test:       {user}")
-        current_site = get_current_site(request).domain
-        link = 'confirm-forgot-password/'
-        url = f'http://{current_site}/{link}{user}/'
-        send_mail(
-            'Здравствуйте',
-            f'для сброса пароля пожалуйста перейдите по ссылке {url})',
-            'nursaid.seitkozhoev@mail.ru',
-            [user]
-            )
-        
+        serializer.save()
+
+        send_forgot_password.delay(request.data['email'], email.activation_code)
+
         return Response('Мы отправили вам письмо на почту с ссылкой на сброс пароля!)')
+
 
 class ConfirmForgotPassword(APIView):
     serializer_class = ConfirmForgotPasswordSerializer
 
     def put(self, request, pk):
-        user = CustomUser.objects.get(email=pk)
-        new_password = request.data['new_password']
-        user.set_password(new_password)
-        user.save()
-        return Response('Вы успешно сменили ваш пароль!)', status=status.HTTP_202_ACCEPTED)        
-        
+        user = CustomUser.objects.get(activation_code=pk)
+        serializer = self.serializer_class(user, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        return Response('Вы успешно сменили ваш пароль!)', status=status.HTTP_200_OK) # TODO
+
+
+class AdminResetPassword(APIView):
+    serializer_class = AdminResetPasswordSerializer
+
+    def post(self, request):
+        serializer = self.serializer_class(data=request.data)
+        serializer.is_valid()
+        serializer.save()
+
+        return Response('Пароль пользователя успешно сменен и отправлен на почту)', status=status.HTTP_202_ACCEPTED)

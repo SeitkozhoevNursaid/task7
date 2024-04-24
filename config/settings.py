@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from decouple import config
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -20,10 +21,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-bny)jkqk$u6h1&l#_c0ec!u_%%83e0@@u6xb7%q%n7!_($kher'
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = config('DEBUG', cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -38,10 +39,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    #libraries
     'rest_framework',
     'rest_framework_simplejwt',
-    'login',
     'django_celery_beat',
+
+    #apps
+    'login',
 ]
 
 MIDDLEWARE = [
@@ -80,12 +85,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'task7',
-        'USER': 'nursaid',
-        'PASSWORD': '1234',
-        'HOST': 'localhost',
-        'PORT': 5432,
+        'ENGINE': config('ENGINE'),
+        'NAME': config('NAME'),
+        'USER': config('USER'),
+        'PASSWORD': config('PASSWORD'),
+        'HOST': config('HOST'),
+        'PORT': config('PORT'),
     }
 }
 
@@ -134,45 +139,27 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=155),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=1),
-    "AUTH_HEADER_TYPES": ("Bearer", "Token")
+    "AUTH_HEADER_TYPES": ("Bearer", "Token")  # TODO #для чего? Он дает в заголовке AUTHORIZATION понять что дает токен авторизации
 }
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
-    
-     
-    }
-
-
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = 'smtp.mail.ru'
-EMAIL_HOST_USER = 'nursaid.seitkozhoev@mail.ru'
-EMAIL_HOST_PASSWORD = 'rhbqep9nqnMrHtnU8Xuw'
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-
-
-
-CELERY_BROKER_URL = 'redis://localhost:6379/0'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'
-CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60
-CELERY_ACCEPT_CONTENT = ['application/json']
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_TIMEZONE = 'Asia/Bishkek'
-
-
-CELERY_BEAT_SCHEDULE = {
-    'change_password_month': {
-        'task': 'config.tasks.change_password_month',
-        'schedule': timedelta(seconds=20),
-    },
-    # 'delete_inactive_users_every_day': {
-    #     'task': 'config.tasks.delete_inactive_users',
-    #     'schedule': timedelta(seconds=55),
-    # },
 }
 
+
+EMAIL_BACKEND = config('EMAIL_BACKEND')
+EMAIL_HOST = config('EMAIL_HOST')
+EMAIL_HOST_USER = config('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD')
+EMAIL_PORT = config('EMAIL_PORT')
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', cast=bool)
+
+
+CELERY_BROKER_URL = config('CELERY_BROKER_URL')
+CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND')
+CELERY_TASK_TRACK_STARTED = config('CELERY_TASK_TRACK_STARTED', cast=bool)
+CELERY_TASK_TIME_LIMIT = 30 * 60
+CELERY_TIMEZONE = config('CELERY_TIMEZONE')
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
